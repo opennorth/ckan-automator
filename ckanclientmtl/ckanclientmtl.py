@@ -1,14 +1,17 @@
-'''IL FAUT PRENDRE LA VERSION DU CKANCLIENT VENANT DU MASTER GITHUB... PAS PIP INSTALL'''
-'''IL FAUT SOUVENT AUGMENTER LA TAILLE MAX DE CE QUI PEUT ETRE UPLOAD. EXEMPLE NGINX: client_max_body_size 2M;'''
+
 import ckanclient
 import urllib
 import os
 import json   
 import os.path
+import logging
+from time import gmtime, strftime
 
 class CkanClientMtl(ckanclient.CkanClient):
 
     ckan_source = None
+
+    logger = logging.getLogger('ckanclientmtl')
 
     group_list = []
     package_list = []
@@ -132,45 +135,39 @@ class CkanClientMtl(ckanclient.CkanClient):
 
 
     def push_resource(self, package_name, resource):
+        '''Upload file to CKAN.
 
-        print "Will push resource %s" % resource["url"]
+        If the resource url starts with http, the script download the resource
+        locally, else directly take it where it is.
+
+        :param package_name: name of the package to link with the resource
+        :param treated_path: structure like CKAN resource structure containing
+        the resource_type, the format, the name and the description 
+        '''
+
+        #print "Will push resource %s" % resource["url"]
         if (resource["url"].startswith('http') ):
             #this a remote file, download it
             local_path = self.download_remote_file(resource)
         else:
-            '''TODO: GERE LE PATH SI C'EST UN FICHIER LOCAL'''
             local_path = resource["url"]
 
-        #ckan.upload_file('my_data.csv')
+        #print "sur le point d'upload %s " % local_path
+        try: 
+            remote_path, error = self.ckan_target.upload_file(local_path)
+        except Exception, e:
+             raise ckanclient.CkanApiError('Erreur upload de fichier: %s' % e )
 
-        print "sur le point d'upload %s " % local_path
-        remote_path, error = self.ckan_target.upload_file(local_path)
+        try:
+            self.ckan_target.add_package_resource(package_name, remote_path,
+                resource_type='data', 
+                format=resource["format"], 
+                name=resource["name"], 
+                description=resource["description"])
 
-        if (remote_path == ''):
-            print "!======= ERREUR ========!"
-            print error
-            print "!======= ERREUR ========!"
+        except Exception, e:
+            raise ckanclient.CkanApiError('Erreur en liant ressource %s avec package %s: %s' % (remote_path, package_name, e) )
 
-        '''TODO: MIEUX GERER LES ERREURS VENANT DE L'UPLOAD'''
-
-        print "File uploaded to url: %s " % remote_path
-
-        #print "Truc : %s %s %s" % (resource["format"], resource["name"], resource["description"] )
-
-        self.ckan_target.add_package_resource(package_name, remote_path,
-            resource_type='data', 
-            format=resource["format"], 
-            name=resource["name"], 
-            description=resource["description"])
-
-        print "File linked to package:  %s" % package_name
-
-
-    def upload_file(self, local_path):
-
-        remote_path, error = self.ckan_target.upload_file(local_path)
-
-        print "File uploaded to url: %s " % remote_path
 
     def download_remote_file (self, resource):
         #print resource
@@ -187,23 +184,57 @@ class CkanClientMtl(ckanclient.CkanClient):
         return local_path
 
     def push_from_directory(self, path, treated_path):
+        '''Send a local file to a CKAN instance. 
+        TODO : QUELLE INSTANCE
+
+        The local file must constain a JSON metadata file
+        The script search for subdirectory in path
+        In each subdirectory there should be one metadata
+        file and one file to be uploaded.
+
+        :param path: local path where the file/metadata is located
+        :param treated_path: local path where the successfully uploaded
+        directories will be copied. The target path should exist. 
+        '''
+        transfert_subdir = treated_path + 'ckan_import_' + strftime("%Y%m%d%H%M%S", gmtime()) + '/'
+        if not os.path.exists(transfert_subdir):
+            os.makedirs(transfert_subdir)
+
         for dirname, dirnames, filenames in os.walk(path):
             if (dirname != path):
                 if (os.path.isfile(dirname + '/resource.json')):
-                    json_dump = json.loads(open(dirname + '/resource.json').read())
-                    package_name = json_dump['name'];
-                    resource = json_dump['resources'][0]
-                    resource['url'] = dirname + '/' + resource['url']
+                    #We have a resource to upload!
+                    #print "Je vais ouvrir un fichier: %s" % (dirname + '/resource.json')
+                    try:
+                        json_dump = json.loads(open(dirname + '/resource.json').read())
+
+                        package_name = json_dump['name'];
+                        resource = json_dump['resources'][0]
+                        resource['url'] = dirname + '/' + resource['url']
 
 
-                    self.push_resource(package_name, resource)
+                        self.push_resource(package_name, resource)
 
-                    os.rename(dirname, dirname.replace(path, treated_path))
+                        os.rename(dirname, dirname.replace(path, transfert_subdir))
+
+                    except ValueError:
+                        
+                        self.logger.error("Erreur de l'ouverture d'un fichier de metadonnees: %s" % (dirname + '/resource.json')) # and so will this.
+                            
+                    except OSError, e:
+                        self.logger.error("Deplacement impossible dans repertoire %s : %s" % (treated_path, str(e))) 
+
+                    except ckanclient.CkanApiError, e:
+                        self.logger.error("Erreur CKAN : %s" % (str(e))) 
+
+                    except Exception, e:
+                        self.logger.error("Erreur : %s" % (repr(e))) 
+
 
                 elif (os.path.isfile(dirname + '/package.json')):
                     print "Nous avons un package! -- cette partie n'est pas implementee"
                 else :
-                    print "Y a rien icitte! %s" % (dirname + 'package.json')
+                    self.logger.error("Repertoire sans fichier de metadonnees %s" % (dirname)) 
 
 
 
