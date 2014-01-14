@@ -1,0 +1,10 @@
+{
+    "name": "injected-dataset",
+
+    "resources": {
+            "description": "This file is an example of CSV file uploaded via API",
+            "format": "CSV",
+            "name": "Example file",
+            "url": "resource.csv"
+    }
+}

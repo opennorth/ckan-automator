@@ -15,12 +15,8 @@ class CkanClientMtl(ckanclient.CkanClient):
 
     group_list = []
     package_list = []
-    resource_dict = {}
 
-    #Manque: licence_id, 
     package_param_list = [u'name', u'title', u'type', u'state', u'author', u'author_email', u'maintainer', u'maintainer_email', u'notes', u'url', u'version', u'tags', u'extras', u'groups'] 
-    #package_param_list = [u'name', u'title', u'type', u'state', u'author', u'author_email', u'maintainer', u'maintainer_email'] 
-
     group_param_list = [u'name', u'id', u'title', u'description', u'image_url', u'type', u'state', u'approval_status'] 
 
     def __init__(self, base_location, api_key):
@@ -30,7 +26,11 @@ class CkanClientMtl(ckanclient.CkanClient):
         self.ckan_source = ckanclient.CkanClient(base_location=url)
 
     def get_group_list (self, ckan_instance):
+        '''Retrieve all the groups from an instance and populate 'group_list'
+        with the content.
 
+        :param ckan_instance: CKAN client object to use to retrieve the groups.
+        '''
         ckan_group_list = ckan_instance.group_register_get()
 
         for group_item in ckan_group_list:
@@ -43,49 +43,78 @@ class CkanClientMtl(ckanclient.CkanClient):
                    new_group_entity[key] = value 
 
            self.group_list.append(new_group_entity)
-        print "Nombre de groupes lus : %s" % len(self.group_list)
+        self.logger.info("%s groups read" % len(self.group_list))
 
     def group_exist (self, ckan_instance, group_id):
+        '''Check if group 'group_id' exists in the CKAN instance
+        pointed by the ckan client object 'ckan_instance'
+        '''        
         try:
             ckan_instance.group_entity_get(group_id)
             return True
         except ckanclient.CkanApiNotFoundError:
             return False       
 
-    def push_group (self):
-        '''TODO TESTER SI LE GROUPE EXISTE'''
+    def push_all_groups (self):
+        '''POST the groups contained in the group_list list to 
+           the ckan instance pointed by the ckan_target object.
+           If group does not exist, create it, else update it'''
         for group in self.group_list:
-            self.ckan_target.group_register_post(group)
+
+            if (self.group_exist(self.ckan_target, group["name"])):
+                self.logger.info("Group exists - put it - %s" % group["name"])
+                self.ckan_target.group_entity_put(group)
+            else:
+                self.logger.info("Group does not exist - post it - %s" % group["name"])
+                self.ckan_target.group_register_post(group)                
 
         del self.group_list[:]
 
     def get_package_from_json (self, json_file):
+        '''Build a package list from a json file 
+        and put the content in package_list '''
         package = json.loads(open(json_file).read())
 
         self.package_list.append(package)
 
+    def delete_all_groups (self):
+        '''Delete all the groups listed in group_list'''
+        for group in self.group_list:
+            self.logger.info("deleting group %s" % group["name"])
+            self.ckan_target.group_entity_delete(group["name"])      
 
-    def get_package_list (self, ckan_instance, package_list=None):
+        del self.group_list[:]
 
 
+    def get_package_list (self, ckan_instance, package_limitation=None):
+        '''If 'package_limitation' is provided, the function will only
+            process these packages. Else, it will read all the package
+            available in ckan_instance. The listed packaged will appended
+            in package_list (with all the metadata)
 
-        if (package_list == None):
+            param ckan_instance: ckan instance where the packages should
+            be read.
+            param package_limitation: list of packaged id/name that will 
+            processed (the other will be ignored) '''
+
+
+        if (package_limitation == None):
             package_source_list = ckan_instance.package_register_get()
-            #print group_source_list
+
         else:
-            package_source_list = package_list
+            package_source_list = package_limitation
 
         for package_item in package_source_list:
 
             try:
                 package_entity =  ckan_instance.package_entity_get(package_item) 
-                #print package_entity
 
                 self.package_list.append(package_entity)
             except ckanclient.CkanApiNotAuthorizedError:
-                print "Access non autorise pour groupe %s" % package_item
+                self.logger.warning("Access not authorized to group %s" % package_item)
 
-        print "Nombre de packages lus : %s" % len(self.package_list)
+        self.logger.info("Number of packages read : %s" % len(self.package_list))
+
 
     def package_exist (self, ckan_instance, package_id):
         try:
@@ -95,40 +124,48 @@ class CkanClientMtl(ckanclient.CkanClient):
             return False
 
 
-    def push_all_packages (self):
-        '''TODO: VERIFIER SI TOUTES LES DONNEES SONT TRANSFEREE - IL MANQUE AU MOINS LES TAGS D'ARRONDISSEMENT'''
+    def push_all_packages (self, push_resources=True, organization=None, licence=None):
+
+
         for package in self.package_list:
-            print "Push %s" % package["name"]
-            self.push_package(package)
+            self.logger.info("Pushing %s" % package["name"])
+            self.push_package(package, push_resources, organization, licence)
 
 
         del self.package_list[:]
 
-    def push_package (self, package):
-         #print package
+    def push_package (self, package, push_resources=True, organization=None, licence=None):
+        '''POST a package item to the ckan_target instance (including
+            attached resources if present)'''
 
         new_package_entity = {}
         for key,value in package.items():
             if key in self.package_param_list:
                 new_package_entity[key] = value 
 
+        if organization != None:
+            new_package_entity["owner_org"] = organization
+
+        if licence != None:
+            new_package_entity["license_id"] = licence
+
         if (self.package_exist(self.ckan_target, package["name"])):
-            print "Package exists - put it - %s" % package["name"]
+            self.logger.info("Package exists - put it - %s" % package["name"])
             self.ckan_target.package_entity_put(new_package_entity)
         else:
-            print "Package does not exist - post it - %s" % package["name"]
+            self.logger.info("Package does not exist - post it - %s" % package["name"])
             self.ckan_target.package_register_post(new_package_entity)       
         
-        #upload resourcs
-        print package
-
-        for resource in package["resources"]:
-            self.push_resource(package["name"], resource)
+        #upload resources if requested
+        if push_resources == True:
+            for resource in package["resources"]:
+                self.push_resource(package["name"], resource)
 
 
     def delete_all_packages (self):
+        '''Delete all the packages listed in packages_list'''
         for package in self.package_list:
-            print "delete %s" % package["name"]
+            self.logger.info("deleting package %s" % package["name"])
             self.ckan_target.package_entity_delete(package["name"])        
 
         del self.package_list[:]
@@ -170,22 +207,23 @@ class CkanClientMtl(ckanclient.CkanClient):
 
 
     def download_remote_file (self, resource):
-        #print resource
-        #print resource["url"]
-        directory = "/tmp/" + resource["id"]
+        '''Download a remote file locally
+        and returns the path where it was downloaded'''
+
+        directory = "/tmp/" + resource["name"]
         if not os.path.exists(directory):
             os.makedirs(directory)
         local_path = directory  + "/" + resource["url"].split('/')[-1]
         open(local_path, 'a').close()
-        print "Telecharge fichier "
-        print local_path
+    
+        self.logger.info("downloading remote file to %s" % local_path)
+
         urllib.urlretrieve (resource["url"], local_path) 
 
         return local_path
 
     def push_from_directory(self, path, treated_path):
-        '''Send a local file to a CKAN instance. 
-        TODO : QUELLE INSTANCE
+        '''Send a local file to the ckan_target instance. 
 
         The local file must constain a JSON metadata file
         The script search for subdirectory in path
@@ -196,45 +234,65 @@ class CkanClientMtl(ckanclient.CkanClient):
         :param treated_path: local path where the successfully uploaded
         directories will be copied. The target path should exist. 
         '''
+        resources_found, resources_success = 0,0
         transfert_subdir = treated_path + 'ckan_import_' + strftime("%Y%m%d%H%M%S", gmtime()) + '/'
         if not os.path.exists(transfert_subdir):
             os.makedirs(transfert_subdir)
 
+
         for dirname, dirnames, filenames in os.walk(path):
+            
+            metadata_file = '/metadata.json'
+
             if (dirname != path):
-                if (os.path.isfile(dirname + '/resource.json')):
+                resources_found += 1
+
+                if (os.path.isfile(dirname + metadata_file)):
+                    self.logger.info("Directory containing resources found: %s" % (dirname))
+
                     #We have a resource to upload!
                     #print "Je vais ouvrir un fichier: %s" % (dirname + '/resource.json')
                     try:
-                        json_dump = json.loads(open(dirname + '/resource.json').read())
+                        json_dump = json.loads(open(dirname + metadata_file).read())
 
-                        package_name = json_dump['name'];
-                        resource = json_dump['resources'][0]
+                        package_name = json_dump['name']
+                        resource = json_dump['resources']
                         resource['url'] = dirname + '/' + resource['url']
-
 
                         self.push_resource(package_name, resource)
 
                         os.rename(dirname, dirname.replace(path, transfert_subdir))
+                        resources_success += 1
 
                     except ValueError:
                         
-                        self.logger.error("Erreur de l'ouverture d'un fichier de metadonnees: %s" % (dirname + '/resource.json')) # and so will this.
+                        self.logger.error("Error while reading metadata file: %s" % (dirname + '/resource.json')) # and so will this.
                             
                     except OSError, e:
-                        self.logger.error("Deplacement impossible dans repertoire %s : %s" % (treated_path, str(e))) 
+                        self.logger.error("OS Error %s : %s" % (treated_path, str(e))) 
 
                     except ckanclient.CkanApiError, e:
-                        self.logger.error("Erreur CKAN : %s" % (str(e))) 
+                        self.logger.error("CKAN Error : %s" % (str(e))) 
 
                     except Exception, e:
-                        self.logger.error("Erreur : %s" % (repr(e))) 
+                        self.logger.error("Error : %s" % (repr(e))) 
 
-
-                elif (os.path.isfile(dirname + '/package.json')):
-                    print "Nous avons un package! -- cette partie n'est pas implementee"
                 else :
-                    self.logger.error("Repertoire sans fichier de metadonnees %s" % (dirname)) 
+                    self.logger.error("No metadata available for file in directory %s" % (dirname)) 
 
+        if resources_found > 0:
+            self.logger.info("%s directories found, %s resources successfully uploaded" % (resources_found, resources_success))
+
+        if (resources_found != resources_success):
+            self.logger.info("Directory not treated:")
+
+            for dirname, dirnames, filenames in os.walk(path):
+                if (dirname != path):
+                    self.logger.info("   " + dirname)
+
+            return False, resources_found, resources_success
+
+        else:
+            return True, resources_found, resources_success
 
 
