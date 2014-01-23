@@ -33,28 +33,29 @@ logger.addHandler(logfile)
 #Get info for the "target" CKAN instance
 ckan_target = config.get('General', 'ckan_target')
 ckan_target_key = config.get('General', 'ckan_target_api_key')
+ckan_version = config.get('General', 'ckan_version')
 
-ckanclient = ckanclientmtl.CkanClientMtl(ckan_target, ckan_target_key)
+ckanclient = ckanclientmtl.CkanClientMtl(ckan_target, ckan_target_key, ckan_version)
 ckanclient.logger = logger
 
 
 #Serious stuff starting here
-'''Flushing all the packages of an instance'''
+'''Flushing all the packages of an instance
 ckanclient.get_package_list(ckanclient.ckan_target)
-ckanclient.delete_all_packages()
+ckanclient.delete_all_packages()'''
 
 
-'''Flushing all the groups of an instance'''
+'''Flushing all the groups of an instance
 ckanclient.get_group_list(ckanclient.ckan_target)
-ckanclient.delete_all_groups()
+ckanclient.delete_all_groups()'''
 
 
-'''Copying groups from another CKAN instance'''
+'''Copying groups from another CKAN instance
 ckanclient.set_ckan_source('http://donnees.ville.montreal.qc.ca/api/')
 ckanclient.get_group_list(ckanclient.ckan_source)
-ckanclient.push_all_groups()
+ckanclient.push_all_groups()'''
 
-'''Injecting ad hoc group'''
+'''Injecting ad hoc group
 ckanclient.group_list.append({
 	u'title': u'My custom group', 
 	u'description': u'This is an updated description.', 
@@ -62,17 +63,17 @@ ckanclient.group_list.append({
 	u'image_url': u'http://www.meteoweb.eu/wp-content/uploads/2011/08/meteo.png', 
 	u'type': u'group',
 	u'name': u'custom-group'})
-ckanclient.push_all_groups()
+ckanclient.push_all_groups()'''
 
 
 '''Copying packages from another CKAN instance'''
-'''Note: The owner organization will only work on CKAN 2.2+'''
+'''Note: The owner organization will only work on CKAN 2.2+
 ckanclient.set_ckan_source('http://donnees.ville.montreal.qc.ca/api/')
 ckanclient.get_package_list(ckanclient.ckan_source, ('parcours-riverain', 'resultats-elections-2013'))
-ckanclient.push_all_packages(False, 'ville-de-montreal', 'SCOL')
+ckanclient.push_all_packages(False, 'ville-de-montreal', 'SCOL')'''
 
 
-'''Creating/updating a package directly'''
+'''Creating/updating a package directly
 ckanclient.package_list.append({
 	u'name': u'injected-dataset',
 	u'title': u'A dataset injected via the API',
@@ -82,24 +83,24 @@ ckanclient.package_list.append({
 	u'tags': [u'One tag', u'Another tag'],
 	u'groups': [u'custom-group']
 	})
-ckanclient.push_all_packages(False, 'ville-de-montreal', 'SCOL')
+ckanclient.push_all_packages(False, 'my-org', 'odc-pddl')'''
 
 
 '''Declare remote resource, download it locally, upload it to CKAN and link it to package'''
 resource = {
 	'url': 'https://ckannet-storage.commondatastorage.googleapis.com/2013-10-27T16:40:24.027Z/open-data-census-database-2013-index-presentation-entries.csv', 
-	'description': 'Test resource', 
+	'description': 'J\'ai changé la description', 
 	'format': 'CSV', 
 	'name': 'Test resource'}
 
-ckanclient.push_resource('injected-dataset', resource)
-
+#ckanclient.push_resource('injected-dataset', resource)
+ckanclient.update_resource('injected-dataset', resource)
 
 '''Upload resource and link it to dataset'''
 '''Read directory containing data + json file containing resource metadata
 First argument is the directory where is stored the resource to upload,
-the second argument is where the uploaded resource has to be moved'''
-ckanclient.push_from_directory(config.get('General', 'path_for_resources'), config.get('General', 'treated_item_path'))
+the second argument is where the uploaded resource has to be moved
+ckanclient.push_from_directory(config.get('General', 'path_for_resources'), config.get('General', 'treated_item_path'))'''
 
 
 #Send report mail

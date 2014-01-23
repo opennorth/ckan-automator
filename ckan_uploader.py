@@ -30,13 +30,15 @@ logfile.setFormatter(frmt)
 # add the Handler to the logger
 logger.addHandler(logfile)
 
-
-
 #Get info for the "target" CKAN instance
 ckan_target = config.get('General', 'ckan_target')
 ckan_target_key = config.get('General', 'ckan_target_api_key')
+ckan_version = config.get('General', 'ckan_version')
 
-ckanclient = ckanclientmtl.CkanClientMtl(ckan_target, ckan_target_key)
+ckanclient = ckanclientmtl.CkanClientMtl(ckan_target, ckan_target_key, ckan_version)
+ckanclient.logger = logger
+
+
 ckanclient.logger = logger
 
 

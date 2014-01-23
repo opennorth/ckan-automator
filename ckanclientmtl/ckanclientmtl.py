@@ -6,6 +6,7 @@ import json
 import os.path
 import logging
 from time import gmtime, strftime
+import requests
 
 class CkanClientMtl(ckanclient.CkanClient):
 
@@ -19,7 +20,7 @@ class CkanClientMtl(ckanclient.CkanClient):
     package_param_list = [u'name', u'title', u'type', u'state', u'author', u'author_email', u'maintainer', u'maintainer_email', u'notes', u'url', u'version', u'tags', u'extras', u'groups'] 
     group_param_list = [u'name', u'id', u'title', u'description', u'image_url', u'type', u'state', u'approval_status'] 
 
-    def __init__(self, base_location, api_key):
+    def __init__(self, base_location, api_key, ckan_version=2.2):
         self.ckan_target = ckanclient.CkanClient(base_location, api_key)
 
     def set_ckan_source (self, url):
@@ -171,6 +172,41 @@ class CkanClientMtl(ckanclient.CkanClient):
         del self.package_list[:]
 
 
+    def update_resource(self, package_name, resource):
+        
+        # Searching for the id of the resource to be updated
+        package = self.ckan_target.package_entity_get(package_name) 
+        resource_id = ""
+
+        for r in package["resources"]:
+            if (r["name"] == resource["name"]):
+                if (resource_id != ""):
+                    #we have more than one resource
+                    raise ckanclient.CkanApiError('There are two similar resource with the same name. Do know which one to update : %s' % resource["name"] )
+                else:
+                    resource_id = r["id"]
+        if (resource_id == ""):
+            #We did not find the resource to be updated
+            raise ckanclient.CkanApiError('Could not find the resource to update : %s' % resource["name"] )
+
+        if (resource["url"].startswith('http') ):
+            #this a remote file, download it
+            local_path = self.download_remote_file(resource)
+        else:
+            local_path = resource["url"]
+
+        datadict = {"id":resource_id}
+        datadict.update(resource)
+
+        try:
+            requests.post(self.ckan_target.base_location + '/action/resource_update',
+              data=datadict,
+              headers={"X-CKAN-API-Key": self.ckan_target.api_key},
+              files=[('upload', file(local_path))])
+        except Exception, e:
+             raise ckanclient.CkanApiError('Erreur upload de fichier: %s' % e )
+
+
     def push_resource(self, package_name, resource):
         '''Upload file to CKAN.
 
@@ -189,21 +225,36 @@ class CkanClientMtl(ckanclient.CkanClient):
         else:
             local_path = resource["url"]
 
+        if (self.ckan_version >= 2.2):
+
+            datadict = {"package_id":package_name}
+            datadict.update(resource)
+
+            try:
+                requests.post(self.ckan_target.base_location + '/action/resource_create',
+                  data=datadict,
+                  headers={"X-CKAN-API-Key": self.ckan_target.api_key},
+                  files=[('upload', file(local_path))])
+
+            except Exception, e:
+                 raise ckanclient.CkanApiError('Erreur upload de fichier: %s' % e )
+
+        else:
         #print "sur le point d'upload %s " % local_path
-        try: 
-            remote_path, error = self.ckan_target.upload_file(local_path)
-        except Exception, e:
-             raise ckanclient.CkanApiError('Erreur upload de fichier: %s' % e )
+            try: 
+                remote_path, error = self.ckan_target.upload_file(local_path)
+            except Exception, e:
+                 raise ckanclient.CkanApiError('Erreur upload de fichier: %s' % e )
 
-        try:
-            self.ckan_target.add_package_resource(package_name, remote_path,
-                resource_type='data', 
-                format=resource["format"], 
-                name=resource["name"], 
-                description=resource["description"])
+            try:
+                self.ckan_target.add_package_resource(package_name, remote_path,
+                    resource_type='data', 
+                    format=resource["format"], 
+                    name=resource["name"], 
+                    description=resource["description"])
 
-        except Exception, e:
-            raise ckanclient.CkanApiError('Erreur en liant ressource %s avec package %s: %s' % (remote_path, package_name, e) )
+            except Exception, e:
+                raise ckanclient.CkanApiError('Erreur en liant ressource %s avec package %s: %s' % (remote_path, package_name, e) )
 
 
     def download_remote_file (self, resource):
