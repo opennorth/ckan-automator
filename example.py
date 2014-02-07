@@ -38,100 +38,48 @@ ckan_version = config.get('General', 'ckan_version')
 ckanclient = ckanclientmtl.CkanClientMtl(ckan_target, ckan_target_key, ckan_version)
 ckanclient.logger = logger
 
+ckansource = ckanclientmtl.CkanClientMtl('http://another.ckan.net/')
 
 
-ckanclient.push_from_directory(config.get('General', 'path_for_resources'), config.get('General', 'treated_item_path'))
+'''Delete all groups of an install'''
+group_list = ckansource.get_group_list()
+ckansource.delete_groups(group_list)
+
+
+'''Copy groups from another instance (ckansource) to another one (ckanclient)'''
+group_list = ckansource.get_group_list()
+ckanclient.push_groups(group_list)
+
+
+'''Flushing all the packages of an instance'''
+package_list = ckanclient.get_package_list()
+ckanclient.delete_packages(package_list)
+
+'''Copy selected packages from an instance to another'''
+source_packages = ckansource.get_package_list(["2001-census-statistics", "2006-surrey-census"])
+ckanclient.push_package_list(package_list)
 
 
 
-#Serious stuff starting here
-'''Flushing all the packages of an instance
-ckanclient.get_package_list(ckanclient.ckan_target)
-ckanclient.delete_all_packages()'''
+#source_package = ckansource.get_package_list()
+#print source_package
 
 
-'''packages = ckanclient.get_package_list()
 
-print packages
-
-mon_package = packages[0]
-
-mon_package["author"] = 'Stephane'
-
-
-packages = ckanclient.push_package(mon_package, False)'''
 
 '''Declare remote resource, download it locally, upload it to CKAN and link it to package'''
-'''resource = {
+resource = {
 	'url': 'https://ckannet-storage.commondatastorage.googleapis.com/2013-10-27T16:40:24.027Z/open-data-census-database-2013-index-presentation-entries.csv', 
 	'description': 'J\'ai encore changé la description', 
 	'format': 'CSV', 
 	'name': 'Test resource'}
 
-#ckanclient.push_resource('injected-dataset', resource)
-ckanclient.push_resource('un-nom', resource)'''
-
-'''Flushing all the groups of an instance'''
-'''group_list = ckanclient.get_group_list()
-
-the_group = group_list[0]
-the_group["title"] = 'Une version injectée'
-
-ckanclient.push_groups([the_group])
-
-print group_list'''
-
-'''Copying groups from another CKAN instance
-ckanclient.set_ckan_source('http://donnees.ville.montreal.qc.ca/api/')
-ckanclient.get_group_list(ckanclient.ckan_source)
-ckanclient.push_all_groups()'''
-
-'''Injecting ad hoc group
-ckanclient.group_list.append({
-	u'title': u'My custom group', 
-	u'description': u'This is an updated description.', 
-	u'state': u'active', 
-	u'image_url': u'http://www.meteoweb.eu/wp-content/uploads/2011/08/meteo.png', 
-	u'type': u'group',
-	u'name': u'custom-group'})
-ckanclient.push_all_groups()'''
+ckanclient.push_resource('injected-dataset', resource)
 
 
-'''Copying packages from another CKAN instance'''
-'''Note: The owner organization will only work on CKAN 2.2+
-ckanclient.set_ckan_source('http://donnees.ville.montreal.qc.ca/api/')
-ckanclient.get_package_list(ckanclient.ckan_source, ('parcours-riverain', 'resultats-elections-2013'))
-ckanclient.push_all_packages(False, 'ville-de-montreal', 'SCOL')'''
+'''Push resource from a directory'''
+ckanclient.push_from_directory(config.get('General', 'path_for_resources'), config.get('General', 'treated_item_path'))
 
-
-'''Creating/updating a package directly
-ckanclient.package_list.append({
-	u'name': u'injected-dataset',
-	u'title': u'A dataset injected via the API',
-	u'maintainer': u'The Maintainer', 
-	u'maintainer_email': u'opendata@mycity.gov',
-	u'notes': u'Some notes about the dataset.',
-	u'tags': [u'One tag', u'Another tag'],
-	u'groups': [u'custom-group']
-	})
-ckanclient.push_all_packages(False, 'my-org', 'odc-pddl')'''
-
-
-'''Declare remote resource, download it locally, upload it to CKAN and link it to package
-resource = {
-	'url': 'https://ckannet-storage.commondatastorage.googleapis.com/2013-10-27T16:40:24.027Z/open-data-census-database-2013-index-presentation-entries.csv', 
-	'description': 'J\'ai changé la description', 
-	'format': 'CSV', 
-	'name': 'Test resource'}
-
-#ckanclient.push_resource('injected-dataset', resource)
-ckanclient.update_resource('injected-dataset', resource)'''
-
-'''Upload resource and link it to dataset'''
-'''Read directory containing data + json file containing resource metadata
-First argument is the directory where is stored the resource to upload,
-the second argument is where the uploaded resource has to be moved
-ckanclient.push_from_directory(config.get('General', 'path_for_resources'), config.get('General', 'treated_item_path'))'''
 
 
 #Send report mail

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from ckanclientmtl import ckanclientmtl
+import ckanclientmtl
 import ConfigParser 
 import logging
 import smtplib
@@ -38,11 +38,6 @@ ckan_version = config.get('General', 'ckan_version')
 ckanclient = ckanclientmtl.CkanClientMtl(ckan_target, ckan_target_key, ckan_version)
 ckanclient.logger = logger
 
-
-ckanclient.logger = logger
-
-
-#Serious stuff starting here
 
 
 try:

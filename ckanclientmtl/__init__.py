@@ -16,7 +16,7 @@ class CkanClientMtl():
     package_param_list = [u'name', u'title', u'type', u'state', u'author', u'author_email', u'maintainer', u'maintainer_email', u'notes', u'url', u'version', u'tags', u'extras', u'groups'] 
     group_param_list = [u'name', u'id', u'title', u'description', u'image_url', u'type', u'state', u'approval_status'] 
 
-    def __init__(self, base_location, api_key, is_remote= True , ckan_version=2.2):
+    def __init__(self, base_location, api_key=None, is_remote= True , ckan_version=2.2):
         self.ckan_target = ckanclient.CkanClient(base_location, api_key)
         self.ckanapi = ckanapi.RemoteCKAN(base_location,
                         apikey=api_key,
@@ -50,10 +50,10 @@ class CkanClientMtl():
         pointed by the ckan client object 'ckan_instance'
         '''        
         try:
-            self.ckanapi.action.group_show(id=group_id)
-            return True
+            current_group = self.ckanapi.action.group_show(id=group_id)
+            return True, current_group
         except ckanapi.NotFound:
-            return False       
+            return False, None
 
     def push_groups (self, group_list):
         '''POST the groups contained in the group_list list to 
@@ -61,14 +61,20 @@ class CkanClientMtl():
            If group does not exist, create it, else update it'''
         for group in group_list:
 
-            if (self.group_exist(group["name"])):
+            group_exists, current_group = self.group_exist(group["name"])
+
+            if group_exists :
                 self.logger.info("Group exists - put it - %s" % group["name"])
 
-                if 'name' in dict.keys():
+                #We want to only update the new fields and keep the old ones
+                current_group.update(group)
+
+                if 'name' in group.keys():
                     #CKAN API does not like having name and id provided. Name can be used as id...
                     group["id"] = group["name"]
                     del group["name"]
-                self.ckanapi.action.group_update(**group)
+
+                self.ckanapi.action.group_update(**current_group)
             else:
                 self.logger.info("Group does not exist - post it - %s" % group["name"])
                 self.ckanapi.action.group_create(**group)                
@@ -125,21 +131,19 @@ class CkanClientMtl():
 
     def package_exist (self, package_id):
         try:
-            self.ckanapi.action.package_show(id=package_id)
-            return True
+            package = self.ckanapi.action.package_show(id=package_id)
+            return True, package
         except ckanapi.NotFound:
-            return False
+            return False, None
 
 
-    def push_package_list (self, push_resources=True, organization=None, licence=None):
+    def push_package_list (self, package_list, push_resources=True, organization=None, licence=None):
 
 
-        for package in self.package_list:
+        for package in package_list:
             self.logger.info("Pushing %s" % package["name"])
             self.push_package(package, push_resources, organization, licence)
 
-
-        del self.package_list[:]
 
     def push_package (self, package, push_resources=True, organization=None, licence=None):
         '''POST a package item to the ckan_target instance (including
@@ -156,9 +160,23 @@ class CkanClientMtl():
         if licence != None:
             new_package_entity["license_id"] = licence
 
-        if (self.package_exist(package["name"])):
+        #When getting packagin from another source, we don't control the group "id"
+        #while the group name is usually ok.
+        if "groups" in package.keys():
+            for group in package["groups"]:
+                del group["id"]
+
+        if "tags" in package.keys():
+            for group in package["tags"]:
+                del group["id"]
+
+        package_exists, current_package = self.package_exist(package["name"])
+        if package_exists:
             self.logger.info("Package exists - put it - %s" % package["name"])
-            self.ckanapi.action.package_update(**new_package_entity)
+
+            #If a field is not provide in the new package, we keep the old value
+            current_package.update(new_package_entity)
+            self.ckanapi.action.package_update(**current_package)
         else:
             self.logger.info("Package does not exist - post it - %s" % package["name"])
             self.ckanapi.action.package_create(**new_package_entity)       
@@ -182,7 +200,7 @@ class CkanClientMtl():
 
         for resource in package["resources"]:
             if resource["name"] == resource_name:
-                return True, resource["id"]
+                return True, resource
 
         return False, None
 
@@ -211,12 +229,12 @@ class CkanClientMtl():
         datadict = {"package_id":package_name, "upload": open(local_path)}
         datadict.update(resource)
 
-        resource_exist, resource_id = self.resource_exist(resource["name"], package_name)
+        resource_exist, resource = self.resource_exist(resource["name"], package_name)
 
-        print resource_exist, resource_id
+        #print resource_exist, resource["id"]
 
         if resource_exist:
-            datadict["id"] = resource_id
+            datadict["id"] = resource["id"]
             self.ckanapi.action.resource_update(**datadict)
         else:
 
