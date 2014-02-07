@@ -65,6 +65,7 @@ ckansource.delete_groups(group_list)
 
 ####Replicate group structure from another CKAN instance
 
+```
 group_list = ckansource.get_group_list()
 ckanclient.push_groups(group_list)
 

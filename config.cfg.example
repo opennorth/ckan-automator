@@ -1,5 +1,5 @@
 [General]
-ckan_target=http://my.ckan.gov/api
+ckan_target=http://my.ckan.gov
 ckan_target_api_key=11111111-1111-1111-1111-111111111
 path_for_resources=/path/to/resource/
 treated_item_path=/tmp/
