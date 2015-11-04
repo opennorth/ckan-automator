@@ -15,6 +15,7 @@ class CkanClientMtl():
 
     package_param_list = [u'name', u'title', u'type', u'state', u'author', u'author_email', u'maintainer', u'maintainer_email', u'notes', u'url', u'version', u'tags', u'extras', u'groups'] 
     group_param_list = [u'name', u'id', u'title', u'description', u'image_url', u'type', u'state', u'approval_status'] 
+    resource_param_list = [u'name', u'description', u'format', u'url']
 
     def __init__(self, base_location, api_key=None, is_remote= True , ckan_version=2.2):
         self.ckan_target = ckanclient.CkanClient(base_location, api_key)
@@ -123,6 +124,8 @@ class CkanClientMtl():
                 package_list.append(package_entity)
             except ckanclient.CkanApiNotAuthorizedError:
                 self.logger.warning("Access not authorized to group %s" % package_item)
+            except ckanapi.errors.NotFound:
+                self.logger.warning("Access not authorized to group %s" % package_item)
 
         self.logger.info("Number of packages read : %s" % len(package_list))
 
@@ -164,13 +167,25 @@ class CkanClientMtl():
         #while the group name is usually ok.
         if "groups" in package.keys():
             for group in package["groups"]:
-                del group["id"]
+                if "id" in group:
+                    del group["id"]
 
         if "tags" in package.keys():
-            for group in package["tags"]:
-                del group["id"]
+
+            for tag in package["tags"]:
+                if "id" in tag:
+                    del tag["id"] 
+                if "vocabulary_id" in tag : 
+                    del tag["vocabulary_id"]
+                if "revision_timestamp" in tag:
+                    del tag["revision_timestamp"] 
+                if "state" in tag:
+                    del tag["state"]
 
         package_exists, current_package = self.package_exist(package["name"])
+
+        
+
         if package_exists:
             self.logger.info("Package exists - put it - %s" % package["name"])
 
@@ -194,12 +209,12 @@ class CkanClientMtl():
             self.ckanapi.action.package_delete(id=package["name"])        
 
 
-    def resource_exist(self, resource_name, package_name):
+    def resource_exist(self, resource_name, resource_format, package_name):
 
         package = self.ckanapi.action.package_show(id=package_name)
 
         for resource in package["resources"]:
-            if resource["name"] == resource_name:
+            if resource["name"] == resource_name and resource["format"].lower() == resource_format.lower():
                 return True, resource
 
         return False, None
@@ -217,29 +232,58 @@ class CkanClientMtl():
         :param treated_path: structure like CKAN resource structure containing
         the resource_type, the format, the name and the description 
         '''
+        link_files = False
+
         #print "Will push resource %s" % resource["url"]
-        if (resource["url"].startswith('http') ):
+        if (resource["url"].startswith('http') and link_files == False) :
             #this a remote file, download it
             local_path = self.download_remote_file(resource)
         else:
             local_path = resource["url"]
 
-        del resource["url"]
+        #print local_path
 
-        datadict = {"package_id":package_name, "upload": open(local_path)}
-        datadict.update(resource)
 
-        resource_exist, resource = self.resource_exist(resource["name"], package_name)
+        if local_path == None:
+            return False
 
-        #print resource_exist, resource["id"]
+        new_resource_entity = {}
+        for key,value in resource.items():
+            if key in self.resource_param_list:
+                new_resource_entity[key] = value 
 
-        if resource_exist:
-            datadict["id"] = resource["id"]
-            self.ckanapi.action.resource_update(**datadict)
-        else:
+        #datadict = {"package_id":package_name, "upload": open(local_path)}
+        datadict = {"package_id":package_name}
+        datadict.update(new_resource_entity)
 
-            self.ckanapi.action.resource_create(**datadict)
+        #Check if the resource already exists
+        resource_exist, resource = self.resource_exist(resource["name"], resource["format"], package_name)
 
+        try:
+            if resource_exist:
+                self.logger.info("Resource exists, trying to overwrite it")
+                datadict["id"] = resource["id"]
+                if (link_files == False):
+                    self.logger.info("Trying to upload file %s" % local_path)
+                    datadict["url"] = ""
+                    self.ckanapi.call_action('resource_update', datadict, files=[('upload', file(local_path))])
+                else:
+                    self.logger.info("Link file to remote %s" % datadict["url"])
+                    datadict.update({"clear_upload":"true"})
+                    self.ckanapi.call_action('resource_update', datadict)
+            else:
+                self.logger.info("Resource does not exist, create it")
+                if (link_files == False):
+                    self.logger.info("Trying to upload file %s" % local_path)
+                    datadict["url"] = ""
+                    self.ckanapi.call_action('resource_create', datadict, files=[('upload', file(local_path))])
+                else: 
+                    self.logger.info("Link file to remote %s" % datadict["url"])
+                    self.ckanapi.call_action('resource_create', datadict)
+
+        except requests.exceptions.ConnectionError, e:
+            self.logger.error("Error %s when uploading %s" % (e, local_path))
+            return False
 
     def download_remote_file (self, resource):
         '''Download a remote file locally
@@ -249,13 +293,22 @@ class CkanClientMtl():
         if not os.path.exists(directory):
             os.makedirs(directory)
         local_path = directory  + "/" + resource["url"].split('/')[-1]
-        open(local_path, 'a').close()
-    
-        self.logger.info("downloading remote file to %s" % local_path)
+        
+        try:
+            open(local_path, 'a').close()
+        
+            self.logger.info("downloading remote file to %s" % local_path)
+            resource["url"] = resource["url"].replace("ckanprod","donnees.ville.montreal.qc.ca")
+            
+            urllib.urlretrieve (resource["url"], local_path) 
 
-        urllib.urlretrieve (resource["url"], local_path) 
+            return local_path
 
-        return local_path
+        except IOError, e:
+            self.logger.error("Error %s when downloading %s" % (e, resource["url"]))
+            return None
+
+
 
     def push_from_directory(self, path, treated_path):
         '''Send a local file to the ckan_target instance. 

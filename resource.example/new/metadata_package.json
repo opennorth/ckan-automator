@@ -1,0 +1,31 @@
+{
+    "name": "injected-dataset", /* MANDATORY Unique identified of the dataset, used for example to generate the URL of the dataset*/
+	"title": "Community Energy and Emissions Inventory Report", /* MANDATORY Human readalbe title that will be used to display the dataset*/
+    "author": "the author", /* Theauthor of the dataset. Can be a person or a department */
+	"author_email": "themaintainer@mycity.org",
+    "maintainer" : "The maintainer", /* CKAN allows to differenciate the maintainer which is more the person who will answer inquiries. If you have only one contact, use the author first */
+    "maintainer_email": "themaintainer@mycity.org",
+	"update_frequency": "Yearly", /* Value list is "Yearly", "Monthly", "Weekly", "Daily", "Realtime", "Punctual", "Variable", "Never" */
+	"private": false, /* If ever you want to make a dataset private, put this to true */
+	"license_id": "OGL-BC", /* If all the datasets use the same licence, the scripts that upload the data could use this licence by default so that you wouldn't have to set it */	
+	"organization": "city-of-white-rock", /* Organization assigned to the dataset. Same as the licence: if all the dataset uploaded automatically comme from WR, the script could use a predefined value so that this field does not have have to provided*/
+	"coordinate_system": "WGS84", /*Free text fields to provide information about the coordinate system/projection for geospatial fields */
+	"notes": "A superb description of my dataset so that everybody will understand what it does ", /* MANDATORY */
+	"groups": ["transportation", "maps"], /* ALMOST MANDATORY List of categories (CKAN name them groups) to be assign to the dataset. The value list is "business-and-economy","census-data",
+"community","environment","finance","imagery","infrastructure","local-government","maps","ocean","planning","transportation"*/
+	"tags": ["hello", "the tag", "another tag"], /*List of free text tags assigned to the dataset*/
+    "resources": [
+	    {
+	            "description": "This file is an example of FGDB file uploaded via API",
+	            "format": "FGDB", /*Mandatory */
+	            "name": "Example file", /*Almost Mandatory */
+	            "url": "http://wroms.whiterockcity.ca/opendata/GIS/Data/Spatial/Fire/FGDB/Heli_Pad.fgdb" /*Mandatory */
+	    },
+	    {
+	            "description": "This file is an example of FGDB file uploaded via API",
+	            "format": "CSV",
+	            "name": "Example file",
+	            "url": "http://wroms.whiterockcity.ca/opendata/GIS/Data/Spatial/Fire/CSV/Heli_Pad.csv"
+	    }
+    ]
+}
